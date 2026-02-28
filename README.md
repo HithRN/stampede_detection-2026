@@ -311,7 +311,7 @@ Contributions are welcome! Please:
 
 ##  Authors
 
-Geetanjali Bhola1, Dr. Sumit Srivastava, Hith Rahil Nidhan,
+Geetanjali Bhola, Dr. Sumit Srivastava, Hith Rahil Nidhan,
 Sanyam Kathed
 
 ##  Acknowledgments

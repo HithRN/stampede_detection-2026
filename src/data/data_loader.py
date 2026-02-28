@@ -1,6 +1,5 @@
 """
 Data loading and preprocessing module for stampede detection
-EXACT same pipeline as original code - optical flow encoded in RGB images
 """
 
 import os
@@ -225,7 +224,6 @@ def calculate_scalar_features(flow_sequence, frame_sequence):
 def calculate_flow_acceleration(flow_sequences):
     """
     Calculate frame-wise differences in optical flow (acceleration).
-    EXACT implementation from original code.
     """
     accelerations = []
 
@@ -251,7 +249,6 @@ def calculate_flow_acceleration(flow_sequences):
 def calculate_flow_divergence(flow_sequences):
     """
     Calculate spatial divergence of optical flow.
-    EXACT implementation from original code.
     """
     divergences = []
 
@@ -278,7 +275,6 @@ def calculate_scene_changes(original_frames):
     """
     Detect scene changes using structural similarity (SSIM).
     Returns a sequence of SSIM scores between consecutive frames.
-    EXACT implementation from original code.
     """
     ssim_scores = []
 
@@ -310,7 +306,6 @@ def calculate_scene_changes(original_frames):
 def calculate_motion_entropy(flow_sequences):
     """
     Calculate entropy of motion to measure chaos/randomness in the optical flow field.
-    EXACT implementation from original code.
     """
     entropies = []
 

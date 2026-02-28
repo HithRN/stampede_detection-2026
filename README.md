@@ -54,7 +54,7 @@ stampede_detection/
 
 1. **Clone the repository**
 ```bash
-git clone <repository-url>
+git clone https://github.com/HithRN/stampede_detection-2026
 cd stampede_detection
 ```
 

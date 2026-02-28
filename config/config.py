@@ -18,20 +18,20 @@ class Config:
     # ============= MODEL CONFIGURATION =============
     # Sequence parameters
     SEQUENCE_LENGTH = 16
-    IMG_HEIGHT = 64
-    IMG_WIDTH = 64
+    IMG_HEIGHT = 224
+    IMG_WIDTH = 224
     FLOW_CHANNELS = 2  # Optical flow has 2 channels (x, y)
     SCALAR_FEATURES = 4  # Number of additional features
     
     # Model architecture
     LSTM_UNITS = 256
     DENSE_UNITS = 128
-    DROPOUT_RATE = 0.5
+    DROPOUT_RATE = 0.3
     
     # ============= TRAINING CONFIGURATION =============
-    BATCH_SIZE = 16
+    BATCH_SIZE = 8
     EPOCHS = 1
-    LEARNING_RATE = 0.0001
+    LEARNING_RATE = 0.001
     VALIDATION_SPLIT = 0.2
     TEST_SPLIT = 0.1
     
@@ -42,7 +42,7 @@ class Config:
     
     # ============= INFERENCE CONFIGURATION =============
     TEMP_FLOW_DIR = "temp_optical_flow_test"
-    INFERENCE_BATCH_SIZE = 32
+    INFERENCE_BATCH_SIZE = 8
     
     # ============= OUTPUT CONFIGURATION =============
     OUTPUT_DIR = 'outputs'

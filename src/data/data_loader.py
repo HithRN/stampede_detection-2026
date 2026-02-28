@@ -388,14 +388,17 @@ def split_data(X_flow, X_scalar, y, original_frames=None, sequence_video_ids=Non
             X_flow_test, X_scalar_test, y_test)
 
 
-def preprocess_video_for_inference(video_path, output_dir):
+def preprocess_video_for_inference(video_path, output_dir, max_frames=200, frame_skip=5, max_sequences=20):
     """
     Process a video file and extract optical flow sequences.
-    For inference on new videos (not for training data).
+    Restores the original temporal scaling, double-resize trick, and sequence batching.
     
     Args:
         video_path: Path to input video
-        output_dir: Directory to save optical flow
+        output_dir: Directory to save optical flow debug frames (optional)
+        max_frames: Max frames to sample from the video
+        frame_skip: How many frames to skip to capture macroscopic motion
+        max_sequences: Maximum number of chunks to generate to prevent OOM
         
     Returns:
         flow_sequences: List of optical flow sequences
@@ -409,54 +412,89 @@ def preprocess_video_for_inference(video_path, output_dir):
     if not cap.isOpened():
         raise ValueError(f"Cannot open video: {video_path}")
     
-    frames = []
-    ret, prev_frame = cap.read()
-    
-    if not ret:
-        raise ValueError("Cannot read first frame from video")
-    
-    prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
-    prev_gray = cv2.resize(prev_gray, (Config.IMG_WIDTH, Config.IMG_HEIGHT))
-    frames.append(cv2.resize(prev_frame, (Config.IMG_WIDTH, Config.IMG_HEIGHT)))
-    
-    flows = []
-    frame_count = 0
-    
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps == 0 or np.isnan(fps):
+        fps = 30.0  # Fallback
         
-        # Resize and convert to grayscale
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Calculate time intervals for frame sampling - aim for ~4 seconds of content
+    target_duration = 4  # seconds
+    target_frames = min(max_frames, int(target_duration * fps))
+
+    # Calculate frame indices to capture macroscopic motion
+    if total_frames <= target_frames:
+        frame_indices = list(range(0, total_frames, frame_skip))
+    else:
+        # Pick frames evenly distributed across the video
+        frame_indices = [int(i * total_frames / target_frames) for i in range(target_frames)]
+
+    print(f"Video: {total_frames} frames at {fps} FPS. Using {len(frame_indices)} frames for analysis.")
+
+    # Aggressive downsampling to smooth micro-movements (arms/legs) and capture macro crowd flow
+    downsample_factor = 0.2  
+    
+    flow_frames = []
+    original_frames = []
+    prev_gray = None
+    processed_count = 0
+    
+    for frame_idx in frame_indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        ret, frame = cap.read()
+        
+        if not ret:
+            continue
+            
+        # 1. Save original frame for SSIM scene change calculation
+        resized_frame = cv2.resize(frame, (Config.IMG_WIDTH, Config.IMG_HEIGHT))
+        original_frames.append(resized_frame)
+        
+        # 2. The Double-Resize Trick: Downsample heavily, then scale back up
+        small_frame = cv2.resize(frame, (0, 0), fx=downsample_factor, fy=downsample_factor)
+        gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
         gray = cv2.resize(gray, (Config.IMG_WIDTH, Config.IMG_HEIGHT))
         
-        # Calculate optical flow
+        if prev_gray is None:
+            prev_gray = gray
+            continue
+            
+        # 3. Custom Farneback tuned for the blurred inputs
         flow = cv2.calcOpticalFlowFarneback(
             prev_gray, gray, None,
-            pyr_scale=0.5, levels=3, winsize=15,
-            iterations=3, poly_n=5, poly_sigma=1.2, flags=0
+            pyr_scale=0.5, 
+            levels=2,      # Reduced from 3
+            winsize=11,    # Reduced from 15
+            iterations=2,  # Reduced from 3
+            poly_n=5, 
+            poly_sigma=1.2, 
+            flags=0
         )
         
-        flows.append(flow)
-        frames.append(cv2.resize(frame, (Config.IMG_WIDTH, Config.IMG_HEIGHT)))
-        
+        flow_frames.append(flow)
         prev_gray = gray
-        frame_count += 1
-    
+        processed_count += 1
+        
     cap.release()
     
-    # Create sequences
+    if len(flow_frames) < Config.SEQUENCE_LENGTH:
+        print(f"Warning: Only extracted {len(flow_frames)} flow frames. Less than required {Config.SEQUENCE_LENGTH}.")
+        return [], []
+        
+    # 4. Sequence Chunking (Prevent GPU memory crash and get an even average)
     flow_sequences = []
     frame_sequences = []
     
-    for i in range(len(flows) - Config.SEQUENCE_LENGTH + 1):
-        flow_seq = flows[i:i + Config.SEQUENCE_LENGTH]
-        frame_seq = frames[i:i + Config.SEQUENCE_LENGTH]
+    # Calculate step size to grab a maximum of 20 evenly spaced sequences
+    step_size = max(1, (len(flow_frames) - Config.SEQUENCE_LENGTH) // max_sequences)
+    start_indices = list(range(0, len(flow_frames) - Config.SEQUENCE_LENGTH + 1, step_size))[:max_sequences]
+    
+    for i in start_indices:
+        flow_seq = flow_frames[i:i + Config.SEQUENCE_LENGTH]
+        # Align original frames to flow frames
+        frame_seq = original_frames[i:i + Config.SEQUENCE_LENGTH]
         
         flow_sequences.append(np.array(flow_seq))
         frame_sequences.append(np.array(frame_seq))
-    
-    print(f"Extracted {len(flow_sequences)} sequences from video")
-    
+        
+    print(f"Extracted {len(flow_sequences)} highly-tuned sequences for prediction.")
     return flow_sequences, frame_sequences
